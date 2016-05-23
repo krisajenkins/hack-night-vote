@@ -4,32 +4,35 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
-{-# OPTIONS -fno-warn-orphans #-}
 module Lib
     ( web
     ) where
 
 import           Control.Applicative
 import           Control.Concurrent.STM
-import           Control.Lens                hiding (from, (^.))
+import           Control.Lens                hiding (from, (.=), (^.))
 import           Control.Monad.IO.Class
 import           CreateHacker                (CreateHacker)
 import qualified CreateHacker
 import           Data.Aeson
 import           Data.ByteString             (ByteString)
+import           Data.ByteString.Char8       (readInt)
 import           Data.Map                    (Map)
 import qualified Data.Map                    as Map
-import           Data.Set                    as Set
+import           Data.Monoid
+import           Data.Set                    (Set)
+import qualified Data.Set                    as Set
 import           Data.Text
-import           Data.UUID
 import           GHC.Generics
 import           Kashmir.Snap.Snaplet.Random
 import           Kashmir.Snap.Utils
+import           Kashmir.UUID
 import           Snap
 import           Snap.CORS
 import           Snap.Util.FileServe
 import           Snap.Util.GZip
 import           Utils
+-- import           Web.PathPieces
 
 data Hacker =
   Hacker {hackerId   :: UUID
@@ -41,18 +44,6 @@ data Hack =
        ,hackName :: Text
        ,votes    :: Set UUID}
   deriving (Show,Eq,Generic,ToJSON,FromJSON)
-
-instance FromJSON UUID where
-  parseJSON =
-    withText "UUID"
-             (\t ->
-                case fromText t of
-                  Nothing -> fail (unpack t)
-                  Just uuid -> return uuid)
-
-
-instance ToJSON UUID where
-  toJSON = String . toText
 
 -- App
 type Election = (Map UUID Hacker,Map Int Hack)
@@ -120,13 +111,36 @@ hackersHandler = get <|> post
                   writeTVar electionVar (newHackers,hacks)
              writeJSON newHacker
 
+voteHandler :: Handler App App ()
+voteHandler =
+  method PUT $
+  do electionVar <- view election
+     Just hackerId :: Maybe UUID <- fromASCIIBytes <$> requireParam "hackerId"
+     Just (hackId,_) <- readInt <$> requireParam "hackId"
+     electionVar <- view election
+     liftIO . atomically $
+       do (hackers,hacks) <- readTVar electionVar
+          let newHacks =
+                Map.adjust (addVote hackerId)
+                           hackId
+                           hacks
+          writeTVar electionVar (hackers,newHacks)
+  where addVote hackerId hack =
+          hack {votes =
+                  Set.insert hackerId
+                             (votes hack)}
+        deleteVote hackerId hack =
+          hack {votes =
+                  Set.delete hackerId
+                             (votes hack)}
 
 routes :: [(ByteString, Handler App App ())]
 routes = [("",serveDirectory "static"),("/api",apiRoutes)]
   where apiRoutes =
           applyCORS defaultOptions $
           route [("/hacks",hacksHandler >>= writeJSON)
-                ,("/hackers",hackersHandler )]
+                ,("/hackers",hackersHandler )
+                ,("/hackers/:hackerId/hacks/:hackId", voteHandler)]
 
 initApp ::  SnapletInit App App
 initApp  =
