@@ -7,6 +7,9 @@ resolver: lts-5.4
 # Local packages, usually specified by relative directory name
 packages:
 - '.'
+- location:
+    git: https://www.github.com/krisajenkins/kashmir
+    commit: ecdebdb72d89342ba92b915911be099c82168f49
 # Packages to be pulled from upstream that are not in the resolver (e.g., acme-missiles-0.3)
 extra-deps:
   - snap-cors-1.2.9
