@@ -16,6 +16,7 @@ import Result exposing (Result)
 type alias Hack =
   { id: Int
   , name: String
+  , voteCount: Int
   }
 
 type alias Hacker =
@@ -46,14 +47,17 @@ type alias Model =
 
 hackDecoder : Json.Decoder Hack
 hackDecoder =
-  Json.object2
+  Json.object3
     Hack
     ("id" := Json.int)
     ("name" := Json.string)
+    ("voteCount" := Json.int)
+
 
 hacksDecoder : Json.Decoder (List Hack)
 hacksDecoder =
   Json.list hackDecoder
+
 
 hackerDecoder : Json.Decoder Hacker
 hackerDecoder =
@@ -62,9 +66,11 @@ hackerDecoder =
     ("hackerId" := Json.string)
     ("hackerName" := Json.string)
 
+
 hackersDecoder : Json.Decoder (List Hacker)
 hackersDecoder =
   Json.list hackerDecoder
+
 
 requestHacks : Cmd Msg
 requestHacks =
@@ -80,11 +86,16 @@ requestHackers =
 
 renderHack : Hack -> Html a
 renderHack hack =
-  li [] [text <| toString hack.id, text " ", text hack.name]
+  li []
+    [ text <| toString hack.id
+    , text ": "
+    , text hack.name
+    , text " (", text <| toString hack.voteCount, text ")"
+    ]
 
 renderHackers : Hacker -> Html a
 renderHackers hacker =
-  li [] [text hacker.hackerId, text " ", text hacker.hackerName]
+  li [] [text hacker.hackerId, text ": ", text hacker.hackerName]
 
 view : Model -> Html Msg
 view model = div []
