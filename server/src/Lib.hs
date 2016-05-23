@@ -4,14 +4,21 @@
 {-# LANGUAGE RecordWildCards     #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell     #-}
+{-# OPTIONS -fno-warn-orphans #-}
 module Lib
     ( web
     ) where
 
-import           Control.Lens        hiding (from, (^.))
+import           Control.Concurrent.STM
+import           Control.Lens           hiding (from, (^.))
+import           Control.Monad.IO.Class
+-- import           Control.Monad.State.Class
+-- import           Control.Monad.STM
 import           Data.Aeson
-import           Data.ByteString     (ByteString)
-import           Data.Set            as Set
+import           Data.ByteString        (ByteString)
+import           Data.Map               (Map)
+import qualified Data.Map               as Map
+import           Data.Set               as Set
 import           Data.Text
 import           Data.UUID
 import           GHC.Generics
@@ -20,10 +27,6 @@ import           Snap.CORS
 import           Snap.Util.FileServe
 import           Snap.Util.GZip
 import           Utils
-
--- App
-data App = App
-makeLenses ''App
 
 data Hacker =
   Hacker {hackerId   :: UUID
@@ -48,22 +51,35 @@ instance FromJSON UUID where
 instance ToJSON UUID where
   toJSON = String . toText
 
-initialHackList :: [Hack]
-initialHackList =
-  [Hack {hackId = 1
-        ,hackName = "ISS SDR"
-        ,votes = Set.empty}
-  ,Hack {hackId = 2
-        ,hackName = "Hack Night Voting System"
-        ,votes = Set.empty}
-  ,Hack {hackId = 3
-        ,hackName = "A*"
-        ,votes = Set.empty}]
+-- App
+type Election = (Map UUID Hacker,Map Int Hack)
+data App =
+  App {_election :: TVar Election}
+makeLenses ''App
+
+initialElection :: Election
+initialElection =
+  (Map.empty
+  ,Map.fromList
+     [(1
+      ,Hack {hackId = 1
+            ,hackName = "ISS SDR"
+            ,votes = Set.empty})
+     ,(2
+      ,Hack {hackId = 2
+            ,hackName = "Hack Night Voting System"
+            ,votes = Set.empty})
+     ,(3
+      ,Hack {hackId = 3
+            ,hackName = "A*"
+            ,votes = Set.empty})])
 
 hackListHandler :: Handler App App [Hack]
 hackListHandler =
   method GET $
-     return initialHackList
+     do electionVar <- view election
+        (_,hacks) <- liftIO . atomically $ readTVar electionVar
+        return (Map.elems hacks)
 
 routes :: [(ByteString, Handler App App ())]
 routes = [("",serveDirectory "static"),("/api",apiRoutes)]
@@ -77,7 +93,8 @@ initApp  =
   do
      addRoutes routes
      wrapSite withCompression
-     return App
+     _election <- liftIO . atomically $ newTVar initialElection
+     return App {..}
 
 web ::  IO ()
 web  =
