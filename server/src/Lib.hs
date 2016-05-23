@@ -74,12 +74,26 @@ initialElection =
             ,hackName = "A*"
             ,votes = Set.empty})])
 
-hackListHandler :: Handler App App [Hack]
+data PublicHack =
+  PublicHack {id        :: Int
+             ,name      :: Text
+             ,voteCount :: Int}
+  deriving (Show,Eq,Generic,ToJSON,FromJSON)
+
+fromHack :: Hack -> PublicHack
+fromHack hack =
+  let id = hackId hack
+      name = hackName hack
+      voteCount = Set.size ( votes hack)
+  in PublicHack {..}
+
+
+hackListHandler :: Handler App App [PublicHack]
 hackListHandler =
   method GET $
-     do electionVar <- view election
-        (_,hacks) <- liftIO . atomically $ readTVar electionVar
-        return (Map.elems hacks)
+  do electionVar <- view election
+     (_,hacks) <- liftIO . atomically $ readTVar electionVar
+     return (fromHack <$> Map.elems hacks)
 
 routes :: [(ByteString, Handler App App ())]
 routes = [("",serveDirectory "static"),("/api",apiRoutes)]
