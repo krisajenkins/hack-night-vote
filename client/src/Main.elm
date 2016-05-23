@@ -1,6 +1,8 @@
 module Main exposing (..)
 import Html.App as Html
-import Html exposing (Html, text, div, input, ul, li)
+import Html exposing (Html, text, div, input, button, ul, li)
+import Html.Attributes exposing (type')
+import Html.Events exposing (onClick)
 import String
 import Http
 import Json.Decode as Json exposing ((:=))
@@ -12,13 +14,14 @@ import Result exposing (Result)
 
 
 type alias Hack =
-  { id: String
+  { id: Int
   , name: String
   }
 
 type Msg
   = NoOp
   | UpdateHacks (List Hack)
+  | RequestUpdateHacks
   | FetchError Http.Error
 
 
@@ -31,7 +34,7 @@ hackDecoder : Json.Decoder Hack
 hackDecoder =
   Json.object2
     Hack
-    ("id" := Json.string)
+    ("id" := Json.int)
     ("name" := Json.string)
 
 
@@ -40,14 +43,27 @@ hacksDecoder =
   Json.list hackDecoder
 
 
-requestHacks : String -> Cmd Msg
-requestHacks query =
-  Http.get hacksDecoder "http://10.112.2.147.55:5000/api/hacks"
+requestHacks : Cmd Msg
+requestHacks =
+  Http.get hacksDecoder "http://10.112.147.55:5000/api/hacks"
     |> Task.perform FetchError UpdateHacks
 
 
+renderHack : Hack -> Html a
+renderHack hack =
+  li [] [text <| toString hack.id, text " ", text hack.name]
+
+
 view : Model -> Html Msg
-view model = div [] [ text "Hello world" ]
+view model = div []
+    [ button
+        [ type' "button"
+        , onClick RequestUpdateHacks
+        ]
+        [ text "refresh" ]
+    , ul []
+      (List.map renderHack model.hacks)
+    ]
 
 
 init : (Model, Cmd Msg)
@@ -57,10 +73,18 @@ init =
   , Cmd.none
   )
 
-
-
 update : Msg -> Model -> ( Model, Cmd Msg )
-update _ model = ( model, Cmd.none ) 
+update action model =
+  case action of
+    RequestUpdateHacks ->
+      ( model, requestHacks)
+    UpdateHacks hacks ->
+      ( { model | hacks = hacks }, Cmd.none ) 
+    FetchError error ->
+      Debug.log (toString error)
+      ( model, Cmd.none ) 
+    NoOp ->
+      ( model, Cmd.none ) 
 
 
 subscriptions : Model -> Sub Msg
