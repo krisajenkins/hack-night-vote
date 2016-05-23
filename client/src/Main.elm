@@ -18,15 +18,29 @@ type alias Hack =
   , name: String
   }
 
+type alias Hacker =
+  { hackerId: String
+  , hackerName: String
+  }
+
 type Msg
   = NoOp
+
+  | Refresh
+
   | UpdateHacks (List Hack)
-  | RequestUpdateHacks
+  | UpdateHackers (List Hacker)
+
+  | RequestSetHacker
+  | SetHacker Int
+
   | FetchError Http.Error
 
 
 type alias Model =
   { hacks: List Hack
+  , hackers: List Hacker
+  , currentHacker: Maybe Int
   }
 
 
@@ -37,11 +51,20 @@ hackDecoder =
     ("id" := Json.int)
     ("name" := Json.string)
 
-
 hacksDecoder : Json.Decoder (List Hack)
-hacksDecoder = 
+hacksDecoder =
   Json.list hackDecoder
 
+hackerDecoder : Json.Decoder Hacker
+hackerDecoder =
+  Json.object2
+    Hacker
+    ("hackerId" := Json.string)
+    ("hackerName" := Json.string)
+
+hackersDecoder : Json.Decoder (List Hacker)
+hackersDecoder =
+  Json.list hackerDecoder
 
 requestHacks : Cmd Msg
 requestHacks =
@@ -49,42 +72,60 @@ requestHacks =
     |> Task.perform FetchError UpdateHacks
 
 
+requestHackers : Cmd Msg
+requestHackers =
+  Http.get hackersDecoder "http://10.112.147.55:5000/api/hackers"
+    |> Task.perform FetchError UpdateHackers
+
+
 renderHack : Hack -> Html a
 renderHack hack =
   li [] [text <| toString hack.id, text " ", text hack.name]
 
+renderHackers : Hacker -> Html a
+renderHackers hacker =
+  li [] [text hacker.hackerId, text " ", text hacker.hackerName]
 
 view : Model -> Html Msg
 view model = div []
     [ button
         [ type' "button"
-        , onClick RequestUpdateHacks
+        , onClick Refresh
         ]
         [ text "refresh" ]
     , ul []
       (List.map renderHack model.hacks)
+    , ul []
+      (List.map renderHackers model.hackers)
     ]
 
+refresh : Cmd Msg
+refresh = Cmd.batch [requestHacks, requestHackers]
 
 init : (Model, Cmd Msg)
 init =
   ( { hacks = []
+    , hackers = []
+    , currentHacker = Nothing
     }
-  , Cmd.none
+  , refresh
   )
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update action model =
   case action of
-    RequestUpdateHacks ->
-      ( model, requestHacks)
     UpdateHacks hacks ->
-      ( { model | hacks = hacks }, Cmd.none ) 
+      ( { model | hacks = hacks }, Cmd.none )
+    UpdateHackers hackers ->
+      ( { model | hackers = hackers }, Cmd.none )
+    Refresh ->
+      ( model, refresh )
     FetchError error ->
       Debug.log (toString error)
-      ( model, Cmd.none ) 
-    NoOp ->
-      ( model, Cmd.none ) 
+      ( model, Cmd.none )
+    _ ->
+      ( model, Cmd.none )
+
 
 
 subscriptions : Model -> Sub Msg
